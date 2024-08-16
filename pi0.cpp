@@ -305,7 +305,7 @@ int main(int argc, char** argv) {
 
     //////////////////////////////////// confs
     int ncorr_new = head.ncorr + 1;
-    int Max_corr = head.ncorr + 2;
+    int Max_corr = head.ncorr + 5;
     double**** data = calloc_corr(confs, Max_corr, head.T);
 
     printf("confs=%d\n", confs);
@@ -321,9 +321,9 @@ int main(int argc, char** argv) {
     for (int iconf = 0; iconf < confs; iconf++) {
         // for (int reim = 0;reim < 2;reim++) {
         for (int t = 0;t < head.T;t++) {
-            for (int n=0;n<head.ncorr;n++){
-            data[iconf][n][t][0] /= head.L*head.L*head.L;
-            data[iconf][n][t][1] /= head.L*head.L*head.L;
+            for (int n = 0;n < head.ncorr;n++) {
+                data[iconf][n][t][0] /= head.L * head.L * head.L;
+                data[iconf][n][t][1] /= head.L * head.L * head.L;
             }
         }
         // }
@@ -355,6 +355,48 @@ int main(int argc, char** argv) {
     free_corr(confs, Max_corr, head.T, data);
     double**** conf_jack = myres->create(Neff, Max_corr, head.T, data_bin);
     free_corr(Neff, Max_corr, head.T, data_bin);
+
+    //////////////////////////////////////////////////////////////
+    // read connected
+    //////////////////////////////////////////////////////////////
+    printf("////////////  read connected ////////////////\n");
+    std::string name_conn(option[6]);
+
+
+    size_t lastindex = name_conn.find_last_of(".");
+    std::string rawname = name_conn.substr(0, lastindex) + "_conn.dat";
+    mysprintf(namefile, NAMESIZE, "%s/%s", option[3], rawname.c_str());
+    printf("reading : %s \n", namefile);
+
+    FILE* infile_con = open_file(namefile, "r");
+    generic_header head_con;
+    head_con.read_header_debug(infile_con);
+    init_global_head(head_con);
+
+    double**** data_conn = calloc_corr(confs, 1, head_con.T);
+    for (int iconf = 0; iconf < head_con.Njack; iconf++) {
+        read_twopt_binary(infile_con, data_conn[iconf], head_con);
+    }
+    double**** data_bin_conn = binning_toNb(confs, 1, head.T, data_conn, bin);
+    free_corr(confs, 1, head.T, data_conn);
+    double**** conf_jack_conn = myres->create(Neff, 1, head.T, data_bin_conn);
+    free_corr(Neff, 1, head.T, data_bin_conn);
+
+    printf("//////////// end read connected ////////////////\n");
+
+    printf("////////////  merging connected into database connected ////////////////\n");
+    for (size_t t = 0; t < head.T; t++) {
+        for (size_t r = 0; r < 2; r++) {
+            for (size_t j = 0; j < Njack; j++) {
+                conf_jack[j][ncorr_new][t][r] = conf_jack_conn[j][0][t][r];
+                conf_jack[j][ncorr_new][t][r] /= (head.L * head.L * head.L);
+            }
+        }
+    }
+    int id_conn_OS = ncorr_new;
+    ncorr_new++;
+    printf("//////////// end merging connected ////////////////\n");
+
 
     /////////////////////////////////////////////////////////////////////////////////////////////////////////
     // print all the effective masses correlators
@@ -390,7 +432,7 @@ int main(int argc, char** argv) {
     fit_info_silent.verbosity = -1;
     fit_info_silent.chi2_gap_jackboot = 1e+6;
     fit_info_silent.guess_per_jack = 0;
-
+    printf("ncorr_new:  %d\n", ncorr_new);
     for (int icorr = 0; icorr < ncorr_new; icorr++) {
         // log effective mass
         double* tmp_meff_corr = plateau_correlator_function(
@@ -454,7 +496,7 @@ int main(int argc, char** argv) {
     fit_info.malloc_ext_P();
     // fit_info.ext_P = calloc_2<double>(1, Njack);
     for (int j = 0;j < Njack;j++) {
-        fit_info.ext_P[0][j] =0 ;
+        fit_info.ext_P[0][j] = 0;
         for (size_t t = 0; t < head.T; t++) {
             fit_info.ext_P[0][j] += conf_jack[j][0][t][0];
         }
@@ -463,25 +505,81 @@ int main(int argc, char** argv) {
 
     }
     printf("%d\n", ncorr_new - 1);
-    printf("%d\n",file_head.l0);
+    printf("%d\n", file_head.l0);
     add_correlators_no_alloc(option, ncorr_new, conf_jack, sub_vev, fit_info, Max_corr);
-    error(ncorr_new - 1 != 2, 1, "main", "ncorr_new wrong");
-    printf("%d\n",file_head.l0);
+    error(ncorr_new - 1 != 3, 1, "main", "ncorr_new wrong");
+    printf("%d\n", file_head.l0);
 
     double* M_PS_sub_vev = plateau_correlator_function(
         option, kinematic_2pt, (char*)"P5P5", conf_jack, Njack,
-        namefile_plateaux, outfile, ncorr_new - 1, "M_{pi0}_disc_sub_vev", M_eff_log, jack_file);
+        namefile_plateaux, outfile, ncorr_new - 1, "M_{pi0}_disc_sub_vev", M_eff_T, jack_file);
     free(M_PS_sub_vev);
     printf("%d\n", ncorr_new - 1);
     check_correlatro_counter(1);
-
-
 
     double* M_PS_shift_log = plateau_correlator_function(
         option, kinematic_2pt, (char*)"P5P5", conf_jack, Njack,
         namefile_plateaux, outfile, 1, "M_{pi0}_disc_shift_log", shift_and_M_eff_log, jack_file);
     free(M_PS_shift_log);
     check_correlatro_counter(2);
+
+    fit_info.restore_default();
+    fit_info.N = 1;
+    fit_info.Njack = Njack;
+    fit_info.T = head.T;
+    fit_info.corr_id = { 1, 2 };
+    fit_info.n_ext_P = 0;
+
+    add_correlators_no_alloc(option, ncorr_new, conf_jack, add_connect, fit_info, Max_corr);
+
+    M_PS = plateau_correlator_function(
+        option, kinematic_2pt, (char*)"P5P5", conf_jack, Njack,
+        namefile_plateaux, outfile, ncorr_new - 1, "{pi0}_full", identity, jack_file);
+    free(M_PS);
+    check_correlatro_counter(3);
+
+    M_PS = plateau_correlator_function(
+        option, kinematic_2pt, (char*)"P5P5", conf_jack, Njack,
+        namefile_plateaux, outfile, ncorr_new - 1, "M_{pi0}_full_shift", shift_and_M_eff_sinh_T, jack_file);
+    free(M_PS);
+    check_correlatro_counter(4);
+
+    fit_info.restore_default();
+    fit_info.N = 1;
+    fit_info.Njack = Njack;
+    fit_info.T = head.T;
+    fit_info.corr_id = { ncorr_new - 1 };
+    fit_info.n_ext_P = 1;
+    fit_info.malloc_ext_P();
+    // fit_info.ext_P = calloc_2<double>(1, Njack);
+    for (int j = 0;j < Njack;j++) {
+        fit_info.ext_P[0][j] = 0;
+        for (size_t t = 0; t < head.T; t++) {
+            fit_info.ext_P[0][j] += conf_jack[j][0][t][0];
+        }
+        fit_info.ext_P[0][j] /= head.T;
+        fit_info.ext_P[0][j] *= fit_info.ext_P[0][j];
+
+    }
+
+    add_correlators_no_alloc(option, ncorr_new, conf_jack, sub_vev, fit_info, Max_corr);
+
+
+    M_PS_sub_vev = plateau_correlator_function(
+        option, kinematic_2pt, (char*)"P5P5", conf_jack, Njack,
+        namefile_plateaux, outfile, ncorr_new - 1, "M_{pi0}_full_sub_vev", M_eff_T, jack_file);
+    free(M_PS_sub_vev);
+    printf("%d\n", ncorr_new - 1);
+    check_correlatro_counter(5);
+
+
+    M_PS_sub_vev = plateau_correlator_function(
+        option, kinematic_2pt, (char*)"P5P5", conf_jack, Njack,
+        namefile_plateaux, outfile, id_conn_OS, "M_{piOS}", M_eff_T, jack_file);
+    free(M_PS_sub_vev);
+    printf("%d\n", ncorr_new - 1);
+    check_correlatro_counter(6);
+
     // eg of fit to correlator
     // struct fit_type fit_info;
     // struct fit_result fit_out;

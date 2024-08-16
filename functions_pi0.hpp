@@ -4,4 +4,5 @@
 
 double lhs_function_pi0_eg(int j, double**** in, int t, struct fit_type fit_info);
 double** sub_vev(int j, double**** in, int t, struct fit_type fit_info);
+double** add_connect(int j, double**** in, int t, struct fit_type fit_info);
 #endif

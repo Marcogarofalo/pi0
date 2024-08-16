@@ -3,7 +3,7 @@ args <- commandArgs(trailingOnly = TRUE)
 # if (length(args)<1){
 #   stop("usage: Rscript convert.R  infile", call.=FALSE)
 # }
-#args[1] <- "data/B64/merging_info.R"
+# args[1] <- "data/B64/merging_info.R"
 args[1] <- "data/B64/merging_info_conn.R"
 source(args[1])
 # L<-as.integer(args[2])
@@ -22,7 +22,7 @@ Nin <- length(infiles)
 
 for (i in seq_along(infiles)) {
   print(infiles[i])
-  df <- read.table(infiles[i], comment.char = "", fill=TRUE)
+  df <- read.table(infiles[i], comment.char = "", fill = TRUE)
   l[[i]] <- df
 }
 
@@ -31,7 +31,7 @@ confs <- list()
 # data<-list()
 
 for (i in c(1:Nin)) {
-  Nconf[[i]] <- length(l[[i]][, 1]) / (L * 2 + 1)
+  Nconf[[i]] <- length(l[[i]][, 1]) / (L + 1 + 1)
   print(Nconf[[i]])
   lc <- which(l[[i]][, 1] == "#")
   confs[[i]] <- l[[i]][lc, 2]
@@ -111,12 +111,16 @@ for (i in seq_along(confs[[1]])) {
   #     cat("\n")
   for (j in c(1:Nin)) {
     writeBin(as.integer(count), con, size = Sint, endian = "little")
-    for (t in c(1:T)) {
-      # r <- c(0, 0)
-      # r[1] <- r[1] + as.numeric(l[[j]][t + i + (T) * (i - 1), 1])
-      # r[2] <- r[2] + as.numeric(l[[j]][t + i + (T) * (i - 1), 2])
-      r <- as.numeric(l[[j]][t + i + (T) * (i - 1), ])
+    for (t in c(1:(T / 2 ))) {
+      
+      r <-c( as.numeric(l[[j]][t + i + (T / 2 + 1) * (i - 1), 1]), 0.0)
       writeBin(r, con, size = Sdoub, endian = "little")
+    }
+    for (t in c((T / 2 + 1):T)) {
+      
+      r <- c(as.numeric(l[[j]][ (T  +1- t) + i + (T / 2 + 1) * (i - 1), 1]),0.0)
+      writeBin(r, con, size = Sdoub, endian = "little")
+      # cat(t, "  ", r, "  ",  i, " \n")
     }
     # r <- r / Nin
     count <- count + 1
